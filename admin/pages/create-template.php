@@ -1,0 +1,1017 @@
+<?php
+
+/**
+ * Template Manager Settings Page
+ */
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+$template_name = '';
+$header_id = 0;
+$footer_id = 0;
+$storage_type = 'file';
+$errors = array();
+$success_message = '';
+$editing_slug = '';
+$is_edit_mode = false;
+$theme_dir = get_stylesheet_directory();
+$write_directory = ($theme_dir && is_dir($theme_dir))
+    ? trailingslashit($theme_dir)
+    : trailingslashit(TEMPLATE_MANAGER_PLUGIN_DIR . 'templates');
+
+$available_headers = tm_get_available_headers();
+$available_footers = tm_get_available_footers();
+$existing_templates = tm_get_registered_templates();
+
+$selected_header_label = __('Default', 'template-manager');
+foreach ($available_headers as $header) {
+    if ((int) $header['id'] === (int) $header_id) {
+        $selected_header_label = $header['title'];
+        break;
+    }
+}
+
+$selected_footer_label = __('Default', 'template-manager');
+foreach ($available_footers as $footer) {
+    if ((int) $footer['id'] === (int) $footer_id) {
+        $selected_footer_label = $footer['title'];
+        break;
+    }
+}
+
+$templates_by_slug = array();
+foreach ($existing_templates as $template) {
+    $templates_by_slug[$template['slug']] = $template;
+}
+
+$open_modal = false;
+
+if (
+    isset($_GET['action'], $_GET['template'])
+    && 'edit' === sanitize_text_field(wp_unslash($_GET['action']))
+    && current_user_can('manage_options')
+) {
+    $requested_slug = sanitize_file_name(wp_unslash($_GET['template']));
+
+    if (isset($templates_by_slug[$requested_slug])) {
+        $template = $templates_by_slug[$requested_slug];
+        $template_name = $template['name'];
+        $header_id = (int) $template['header_id'];
+        $footer_id = (int) $template['footer_id'];
+        $storage_type = ('database' === $template['source']) ? 'database' : 'file';
+        $editing_slug = $template['slug'];
+        $is_edit_mode = true;
+        $open_modal = true;
+    } else {
+        $errors[] = esc_html__('Template not found.', 'template-manager');
+    }
+}
+
+if (
+    isset($_POST['tm_submit_template'])
+    && current_user_can('manage_options')
+    && check_admin_referer('tm_create_template', 'tm_nonce')
+) {
+    $template_name = sanitize_text_field(wp_unslash($_POST['tm_template_name'] ?? ''));
+    $header_id = absint($_POST['tm_header_id'] ?? 0);
+    $footer_id = absint($_POST['tm_footer_id'] ?? 0);
+    $storage_type = sanitize_text_field($_POST['tm_storage_type'] ?? 'file');
+    $editing_slug = sanitize_file_name(wp_unslash($_POST['tm_editing_slug'] ?? ''));
+    $is_edit_mode = '' !== $editing_slug;
+
+    if ('' === $template_name) {
+        $errors[] = esc_html__('Template name is required.', 'template-manager');
+    }
+
+    if (!in_array($storage_type, array('file', 'database'), true)) {
+        $storage_type = 'file';
+    }
+
+    $existing_template = null;
+    if ($is_edit_mode) {
+        if (!isset($templates_by_slug[$editing_slug])) {
+            $errors[] = esc_html__('The selected template no longer exists.', 'template-manager');
+        } else {
+            $existing_template = $templates_by_slug[$editing_slug];
+        }
+    }
+
+    $new_slug = 'template-cu-' . sanitize_title($template_name) . '.php';
+    if ('template-cu-.php' === $new_slug) {
+        $new_slug = 'template-cu-custom-template.php';
+    }
+
+    if (empty($errors) && !$is_edit_mode && isset($templates_by_slug[$new_slug])) {
+        $errors[] = esc_html__('A template with this generated file name already exists.', 'template-manager');
+    }
+
+    if (empty($errors) && $is_edit_mode && $editing_slug !== $new_slug && isset($templates_by_slug[$new_slug])) {
+        $errors[] = esc_html__('Another template already uses this generated file name.', 'template-manager');
+    }
+
+    if (empty($errors)) {
+        $db_templates = get_option('tm_database_templates', []);
+        $generated_template = TM_Template_Manager::generate_elementor_template($template_name, $header_id, $footer_id);
+        $new_slug = key($generated_template['files']);
+
+        if ($is_edit_mode && $existing_template && 'database' === $existing_template['source']) {
+            unset($db_templates[$editing_slug]);
+        }
+
+        if ($is_edit_mode && $existing_template && 'database' !== $existing_template['source']) {
+            $old_slug_base = str_replace(array('template-cu-', '.php'), '', $editing_slug);
+            $old_files = array(
+                'template-cu-' . $old_slug_base . '.php',
+                'header-' . $old_slug_base . '.php',
+                'footer-' . $old_slug_base . '.php',
+            );
+
+            foreach ($old_files as $old_file) {
+                $old_path = $write_directory . $old_file;
+                if (file_exists($old_path)) {
+                    @unlink($old_path);
+                }
+            }
+        }
+
+        if ('database' === $storage_type) {
+            $db_templates[$new_slug] = array(
+                'name' => $template_name,
+                'header_id' => $header_id,
+                'footer_id' => $footer_id,
+            );
+            update_option('tm_database_templates', $db_templates);
+            $success_message = $is_edit_mode
+                ? esc_html__('Template updated.', 'template-manager')
+                : esc_html__('Template saved.', 'template-manager');
+        } else {
+            if ($is_edit_mode && $existing_template && 'database' === $existing_template['source']) {
+                update_option('tm_database_templates', $db_templates);
+            }
+
+            wp_mkdir_p($write_directory);
+
+            $files_created = array();
+            foreach ($generated_template['files'] as $filename => $content) {
+                $file_path = $write_directory . $filename;
+                if (false !== file_put_contents($file_path, $content)) {
+                    $files_created[] = $filename;
+                }
+            }
+
+            if (!empty($files_created)) {
+                $success_message = $is_edit_mode
+                    ? esc_html__('Template updated.', 'template-manager')
+                    : sprintf(
+                        esc_html__('Created: %s', 'template-manager'),
+                        implode(', ', $files_created)
+                    );
+            } else {
+                $errors[] = $is_edit_mode
+                    ? esc_html__('Failed to update template files.', 'template-manager')
+                    : esc_html__('Failed to create files.', 'template-manager');
+            }
+        }
+    }
+
+    if (empty($errors)) {
+        $template_name = '';
+        $header_id = 0;
+        $footer_id = 0;
+        $storage_type = 'file';
+        $editing_slug = '';
+        $is_edit_mode = false;
+        $open_modal = false;
+        $existing_templates = tm_get_registered_templates();
+        $templates_by_slug = array();
+        foreach ($existing_templates as $template) {
+            $templates_by_slug[$template['slug']] = $template;
+        }
+    } else {
+        $open_modal = true;
+    }
+}
+
+if (
+    isset($_GET['action'], $_GET['template'], $_GET['_wpnonce'])
+    && 'delete' === $_GET['action']
+    && current_user_can('manage_options')
+) {
+    $template_slug = sanitize_file_name(wp_unslash($_GET['template']));
+
+    if (wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['_wpnonce'])), 'tm_delete_template_' . $template_slug)) {
+        $db_templates = get_option('tm_database_templates', []);
+
+        if (isset($db_templates[$template_slug])) {
+            unset($db_templates[$template_slug]);
+            update_option('tm_database_templates', $db_templates);
+            $success_message = esc_html__('Template removed.', 'template-manager');
+        } else {
+            $slug_base = str_replace(array('template-cu-', '.php'), '', $template_slug);
+
+            $files_to_delete = array(
+                'template-cu-' . $slug_base . '.php',
+                'header-' . $slug_base . '.php',
+                'footer-' . $slug_base . '.php',
+            );
+
+            foreach ($files_to_delete as $file) {
+                $path = $write_directory . $file;
+                if (file_exists($path)) {
+                    @unlink($path);
+                }
+            }
+
+            $success_message = esc_html__('Template files deleted.', 'template-manager');
+        }
+
+        $existing_templates = tm_get_registered_templates();
+        $templates_by_slug = array();
+        foreach ($existing_templates as $template) {
+            $templates_by_slug[$template['slug']] = $template;
+        }
+    }
+}
+
+$template_usage_counts = array();
+$template_usage_map = array();
+if (!empty($existing_templates)) {
+    global $wpdb;
+
+    $template_slugs = array_map(
+        static function ($item) {
+            return (string) $item['slug'];
+        },
+        $existing_templates
+    );
+
+    $post_types = get_post_types(array('public' => true), 'names');
+    if (empty($post_types)) {
+        $post_types = array('page', 'post');
+    }
+
+    $slug_placeholders = implode(', ', array_fill(0, count($template_slugs), '%s'));
+    $type_placeholders = implode(', ', array_fill(0, count($post_types), '%s'));
+    $query = $wpdb->prepare(
+        "
+        SELECT pm.meta_value AS template_slug, p.ID, p.post_title, p.post_type, p.post_status
+        FROM {$wpdb->postmeta} pm
+        INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+        WHERE pm.meta_key = '_wp_page_template'
+          AND pm.meta_value IN ($slug_placeholders)
+          AND p.post_type IN ($type_placeholders)
+          AND p.post_status NOT IN ('trash', 'auto-draft')
+        ORDER BY p.post_type ASC, p.post_title ASC
+        ",
+        array_merge($template_slugs, $post_types)
+    );
+
+    $usage_rows = $wpdb->get_results($query, ARRAY_A);
+
+    foreach ($template_slugs as $slug) {
+        $template_usage_counts[$slug] = 0;
+        $template_usage_map[$slug] = array();
+    }
+
+    foreach ($usage_rows as $row) {
+        $slug = (string) $row['template_slug'];
+        $post_id = (int) $row['ID'];
+        $post_type = (string) $row['post_type'];
+        $post_type_obj = get_post_type_object($post_type);
+        $type_label = $post_type_obj ? $post_type_obj->labels->singular_name : ucfirst($post_type);
+
+        $title = trim((string) $row['post_title']);
+        if ('' === $title) {
+            $title = sprintf(
+                esc_html__('(No title) #%d', 'template-manager'),
+                $post_id
+            );
+        }
+
+        $template_usage_counts[$slug] = isset($template_usage_counts[$slug])
+            ? $template_usage_counts[$slug] + 1
+            : 1;
+
+        $template_usage_map[$slug][] = array(
+            'id' => $post_id,
+            'title' => $title,
+            'post_type' => $post_type,
+            'type' => $type_label,
+            'status' => (string) $row['post_status'],
+            'edit_link' => get_edit_post_link($post_id, 'raw') ?: '',
+        );
+    }
+}
+
+$per_page = 8;
+$current_page = isset($_GET['tm_page']) ? max(1, absint($_GET['tm_page'])) : 1;
+$total_templates = count($existing_templates);
+$total_pages = max(1, (int) ceil($total_templates / $per_page));
+
+if ($current_page > $total_pages) {
+    $current_page = $total_pages;
+}
+
+$offset = ($current_page - 1) * $per_page;
+$paged_templates = array_slice($existing_templates, $offset, $per_page);
+
+$pagination_base = remove_query_arg(array('tm_page', 'action', 'template', '_wpnonce'));
+$existing_template_slugs = array_map(
+    static function ($item) {
+        return (string) $item['slug'];
+    },
+    $existing_templates
+);
+
+?>
+
+<div class="wrap tm-settings-page">
+    <div class="tm-shell">
+        <div class="tm-header-bar">
+            <div>
+                <h1><?php esc_html_e('Template Settings', 'template-manager'); ?></h1>
+                <p><?php esc_html_e('Create and manage templates from one fast page.', 'template-manager'); ?></p>
+            </div>
+
+            <button type="button" class="tm-primary-btn" data-tm-open-modal>
+                <span class="dashicons dashicons-plus-alt2"></span>
+                <?php esc_html_e('Add Template', 'template-manager'); ?>
+            </button>
+        </div>
+
+        <?php if ($success_message) : ?>
+            <div class="tm-alert success"><?php echo esc_html($success_message); ?></div>
+        <?php endif; ?>
+
+        <?php if (!empty($errors)) : ?>
+            <div class="tm-alert error">
+                <?php foreach ($errors as $error) : ?>
+                    <p><?php echo esc_html($error); ?></p>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+
+        <div class="tm-table-card">
+            <div class="tm-table-head">
+                <h2><?php esc_html_e('Templates', 'template-manager'); ?></h2>
+                <span class="tm-total-chip">
+                    <?php
+                    printf(
+                        esc_html__('Total: %d', 'template-manager'),
+                        $total_templates
+                    );
+                    ?>
+                </span>
+            </div>
+
+            <?php if (empty($paged_templates)) : ?>
+                <div class="tm-empty-state">
+                    <span class="dashicons dashicons-layout"></span>
+                    <p><?php esc_html_e('No templates created yet.', 'template-manager'); ?></p>
+                </div>
+            <?php else : ?>
+                <div class="tm-table-wrap">
+                    <table class="widefat fixed striped tm-template-table">
+                        <thead>
+                            <tr>
+                                <th scope="col"><?php esc_html_e('Name', 'template-manager'); ?></th>
+                                <th scope="col"><?php esc_html_e('Template Name', 'template-manager'); ?></th>
+                                <th scope="col"><?php esc_html_e('Type', 'template-manager'); ?></th>
+                                <th scope="col"><?php esc_html_e('Used By', 'template-manager'); ?></th>
+                                <th scope="col" class="tm-actions-col"><?php esc_html_e('Actions', 'template-manager'); ?></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($paged_templates as $template) : ?>
+                                <?php
+                                $template_type = ('database' === $template['source'])
+                                    ? esc_html__('Virtual (DB)', 'template-manager')
+                                    : esc_html__('Real File', 'template-manager');
+                                $can_manage = !empty($template['has_theme_copy']) || !empty($template['has_db_copy']);
+                                $usage_count = isset($template_usage_counts[$template['slug']])
+                                    ? (int) $template_usage_counts[$template['slug']]
+                                    : 0;
+                                $usage_label = sprintf(
+                                    esc_html(_n('%d page', '%d pages', $usage_count, 'template-manager')),
+                                    $usage_count
+                                );
+                                ?>
+                                <tr>
+                                    <td><strong><?php echo esc_html($template['name']); ?></strong></td>
+                                    <td><code><?php echo esc_html($template['slug']); ?></code></td>
+                                    <td>
+                                        <span class="tm-type-pill <?php echo esc_attr('database' === $template['source'] ? 'database' : 'file'); ?>">
+                                            <?php echo esc_html($template_type); ?>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <?php if ($usage_count > 0) : ?>
+                                            <button
+                                                type="button"
+                                                class="tm-usage-pill tm-usage-link"
+                                                data-tm-usage-open="1"
+                                                data-template-slug="<?php echo esc_attr($template['slug']); ?>"
+                                                data-template-name="<?php echo esc_attr($template['name']); ?>"
+                                                title="<?php esc_attr_e('View pages using this template', 'template-manager'); ?>">
+                                                <?php echo esc_html($usage_label); ?>
+                                            </button>
+                                        <?php else : ?>
+                                            <span class="tm-usage-pill"><?php echo esc_html($usage_label); ?></span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="tm-actions-cell">
+                                        <?php if ($can_manage) : ?>
+                                            <button
+                                                type="button"
+                                                class="tm-icon-btn"
+                                                data-tm-open-modal
+                                                data-editing="1"
+                                                data-template-slug="<?php echo esc_attr($template['slug']); ?>"
+                                                data-template-name="<?php echo esc_attr($template['name']); ?>"
+                                                data-header-id="<?php echo esc_attr((string) $template['header_id']); ?>"
+                                                data-footer-id="<?php echo esc_attr((string) $template['footer_id']); ?>"
+                                                data-storage="<?php echo esc_attr('database' === $template['source'] ? 'database' : 'file'); ?>"
+                                                aria-label="<?php echo esc_attr(sprintf(__('Edit %s', 'template-manager'), $template['name'])); ?>"
+                                                title="<?php echo esc_attr__('Edit template', 'template-manager'); ?>">
+                                                <span class="dashicons dashicons-edit"></span>
+                                            </button>
+                                            <a
+                                                class="tm-icon-btn danger"
+                                                href="<?php echo esc_url(wp_nonce_url(admin_url('admin.php?page=tm-templates&action=delete&template=' . rawurlencode($template['slug'])), 'tm_delete_template_' . $template['slug'])); ?>"
+                                                aria-label="<?php echo esc_attr(sprintf(__('Delete %s', 'template-manager'), $template['name'])); ?>"
+                                                title="<?php echo esc_attr__('Delete template', 'template-manager'); ?>"
+                                                onclick="return confirm('<?php echo esc_js(__('Delete this template?', 'template-manager')); ?>');">
+                                                <span class="dashicons dashicons-trash"></span>
+                                            </a>
+                                        <?php else : ?>
+                                            <span class="tm-readonly-pill"><?php esc_html_e('Plugin', 'template-manager'); ?></span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+
+                <?php if ($total_pages > 1) : ?>
+                    <div class="tm-pagination-wrap">
+                        <?php
+                        echo wp_kses_post(
+                            paginate_links(array(
+                                'base' => add_query_arg('tm_page', '%#%', $pagination_base),
+                                'format' => '',
+                                'current' => $current_page,
+                                'total' => $total_pages,
+                                'prev_text' => '&laquo;',
+                                'next_text' => '&raquo;',
+                                'type' => 'list',
+                            ))
+                        );
+                        ?>
+                    </div>
+                <?php endif; ?>
+            <?php endif; ?>
+        </div>
+    </div>
+
+    <div class="tm-modal" data-state="<?php echo $open_modal ? 'open' : 'closed'; ?>" aria-hidden="<?php echo $open_modal ? 'false' : 'true'; ?>">
+        <div class="tm-modal-backdrop" data-tm-close-modal></div>
+
+        <div class="tm-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="tm-modal-title">
+            <div class="tm-modal-header">
+                <h2 id="tm-modal-title"><?php echo esc_html($is_edit_mode ? __('Edit Template', 'template-manager') : __('Add Template', 'template-manager')); ?></h2>
+                <button type="button" class="tm-close-btn" data-tm-close-modal aria-label="<?php esc_attr_e('Close', 'template-manager'); ?>">
+                    <span class="dashicons dashicons-no-alt"></span>
+                </button>
+            </div>
+
+            <form method="post" class="tm-modal-form" id="tm-template-form" data-existing-slugs="<?php echo esc_attr(wp_json_encode($existing_template_slugs)); ?>">
+                <?php wp_nonce_field('tm_create_template', 'tm_nonce'); ?>
+                <input type="hidden" name="tm_editing_slug" id="tm_editing_slug" value="<?php echo esc_attr($editing_slug); ?>">
+
+                <div class="tm-field-grid">
+                    <label class="tm-field tm-field--full">
+                        <span><?php esc_html_e('Name', 'template-manager'); ?></span>
+                        <input id="tm_template_name" type="text" name="tm_template_name" value="<?php echo esc_attr($template_name); ?>" placeholder="<?php echo esc_attr__('Landing Page', 'template-manager'); ?>">
+                        <small id="tm_template_name_error" class="tm-field-error" aria-live="polite"></small>
+                    </label>
+
+                    <label class="tm-field">
+                        <span><?php esc_html_e('Header', 'template-manager'); ?></span>
+                        <div class="tm-combobox" data-tm-combobox="header">
+                            <input type="hidden" id="tm_header_id" name="tm_header_id" value="<?php echo esc_attr((string) $header_id); ?>">
+                            <input
+                                id="tm_header_display"
+                                class="tm-combobox-input"
+                                type="text"
+                                autocomplete="off"
+                                placeholder="<?php echo esc_attr__('Search header', 'template-manager'); ?>"
+                                value="<?php echo esc_attr($header_id ? $selected_header_label : ''); ?>">
+                            <div class="tm-combobox-menu" id="tm_header_menu">
+                                <button type="button" class="tm-combobox-option" data-id="0" data-title="<?php echo esc_attr__('Default', 'template-manager'); ?>"><?php esc_html_e('Default', 'template-manager'); ?></button>
+                                <?php foreach ($available_headers as $header) : ?>
+                                    <button
+                                        type="button"
+                                        class="tm-combobox-option"
+                                        data-id="<?php echo esc_attr((string) $header['id']); ?>"
+                                        data-title="<?php echo esc_attr($header['title']); ?>">
+                                        <?php echo esc_html($header['title']); ?>
+                                    </button>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </label>
+
+                    <label class="tm-field">
+                        <span><?php esc_html_e('Footer', 'template-manager'); ?></span>
+                        <div class="tm-combobox" data-tm-combobox="footer">
+                            <input type="hidden" id="tm_footer_id" name="tm_footer_id" value="<?php echo esc_attr((string) $footer_id); ?>">
+                            <input
+                                id="tm_footer_display"
+                                class="tm-combobox-input"
+                                type="text"
+                                autocomplete="off"
+                                placeholder="<?php echo esc_attr__('Search footer', 'template-manager'); ?>"
+                                value="<?php echo esc_attr($footer_id ? $selected_footer_label : ''); ?>">
+                            <div class="tm-combobox-menu" id="tm_footer_menu">
+                                <button type="button" class="tm-combobox-option" data-id="0" data-title="<?php echo esc_attr__('Default', 'template-manager'); ?>"><?php esc_html_e('Default', 'template-manager'); ?></button>
+                                <?php foreach ($available_footers as $footer) : ?>
+                                    <button
+                                        type="button"
+                                        class="tm-combobox-option"
+                                        data-id="<?php echo esc_attr((string) $footer['id']); ?>"
+                                        data-title="<?php echo esc_attr($footer['title']); ?>">
+                                        <?php echo esc_html($footer['title']); ?>
+                                    </button>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </label>
+
+                    <div class="tm-field tm-storage-field">
+                        <span><?php esc_html_e('Template Type', 'template-manager'); ?></span>
+                        <div class="tm-storage-toggle">
+                            <span class="tm-toggle-label"><?php esc_html_e('Real File', 'template-manager'); ?></span>
+                            <label class="tm-switch">
+                                <input type="checkbox" id="tm_storage_toggle" <?php checked($storage_type, 'database'); ?>>
+                                <span class="tm-slider"></span>
+                            </label>
+                            <span class="tm-toggle-label"><?php esc_html_e('Virtual (DB)', 'template-manager'); ?></span>
+                        </div>
+                        <p class="tm-help-note"><?php esc_html_e('Real File is safer for long-term use: templates stay in your theme, so uninstalling this plugin will not remove them.', 'template-manager'); ?></p>
+                        <input type="hidden" name="tm_storage_type" id="tm_storage_type_input" value="<?php echo esc_attr($storage_type); ?>">
+                    </div>
+                </div>
+
+                <div class="tm-modal-actions">
+                    <button type="button" class="tm-secondary-btn" data-tm-close-modal><?php esc_html_e('Cancel', 'template-manager'); ?></button>
+                    <button type="submit" name="tm_submit_template" class="tm-primary-btn" id="tm_submit_btn">
+                        <span class="dashicons dashicons-saved"></span>
+                        <span id="tm_submit_label"><?php echo esc_html($is_edit_mode ? __('Save Changes', 'template-manager') : __('Create Template', 'template-manager')); ?></span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="tm-usage-modal" data-state="closed" aria-hidden="true">
+        <div class="tm-usage-modal-backdrop" data-tm-usage-close></div>
+        <div class="tm-usage-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="tm-usage-title">
+            <div class="tm-usage-modal-header">
+                <h3 id="tm-usage-title"><?php esc_html_e('Template Usage', 'template-manager'); ?></h3>
+                <button type="button" class="tm-close-btn" data-tm-usage-close aria-label="<?php esc_attr_e('Close', 'template-manager'); ?>">
+                    <span class="dashicons dashicons-no-alt"></span>
+                </button>
+            </div>
+            <div class="tm-usage-modal-body">
+                <p id="tm-usage-subtitle" class="tm-usage-subtitle"></p>
+                <div id="tm-usage-filters" class="tm-usage-filters"></div>
+                <div id="tm-usage-empty" class="tm-usage-empty"><?php esc_html_e('No content uses this template.', 'template-manager'); ?></div>
+                <ul id="tm-usage-list" class="tm-usage-list"></ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const usageMap = <?php echo wp_json_encode($template_usage_map); ?>;
+        const modal = document.querySelector('.tm-modal');
+        const usageModal = document.querySelector('.tm-usage-modal');
+        const templateForm = document.getElementById('tm-template-form');
+        const toggle = document.getElementById('tm_storage_toggle');
+        const hiddenInput = document.getElementById('tm_storage_type_input');
+        const closeButtons = document.querySelectorAll('[data-tm-close-modal]');
+        const openButtons = document.querySelectorAll('[data-tm-open-modal]');
+        const usageOpenButtons = document.querySelectorAll('[data-tm-usage-open="1"]');
+        const usageCloseButtons = document.querySelectorAll('[data-tm-usage-close]');
+        const usageList = document.getElementById('tm-usage-list');
+        const usageEmpty = document.getElementById('tm-usage-empty');
+        const usageFilters = document.getElementById('tm-usage-filters');
+        const usageSubtitle = document.getElementById('tm-usage-subtitle');
+        const editingSlugInput = document.getElementById('tm_editing_slug');
+        const templateNameInput = document.getElementById('tm_template_name');
+        const headerSelect = document.getElementById('tm_header_id');
+        const footerSelect = document.getElementById('tm_footer_id');
+        const headerDisplay = document.getElementById('tm_header_display');
+        const footerDisplay = document.getElementById('tm_footer_display');
+        const submitLabel = document.getElementById('tm_submit_label');
+        const modalTitle = document.getElementById('tm-modal-title');
+        const templateNameError = document.getElementById('tm_template_name_error');
+        let existingTemplateSlugs = [];
+
+        try {
+            existingTemplateSlugs = JSON.parse(templateForm ? (templateForm.dataset.existingSlugs || '[]') : '[]');
+        } catch (error) {
+            existingTemplateSlugs = [];
+        }
+        const usageState = {
+            items: [],
+            filter: 'all'
+        };
+
+        function slugifyTemplateName(name) {
+            const normalized = name
+                .toLowerCase()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '');
+
+            return normalized ? ('template-cu-' + normalized + '.php') : 'template-cu-custom-template.php';
+        }
+
+        function validateTemplateNameDuplicate() {
+            if (!templateNameInput || !templateNameError) {
+                return true;
+            }
+
+            const rawName = templateNameInput.value.trim();
+            if (rawName === '') {
+                templateNameError.textContent = '';
+                templateNameInput.classList.remove('tm-input-invalid');
+                return true;
+            }
+
+            const generatedSlug = slugifyTemplateName(rawName);
+            const editingSlug = editingSlugInput ? editingSlugInput.value : '';
+            const isDuplicate = existingTemplateSlugs.includes(generatedSlug) && generatedSlug !== editingSlug;
+
+            if (isDuplicate) {
+                templateNameError.textContent = 'Template name already exists.';
+                templateNameInput.classList.add('tm-input-invalid');
+                return false;
+            }
+
+            templateNameError.textContent = '';
+            templateNameInput.classList.remove('tm-input-invalid');
+            return true;
+        }
+
+        function getComboboxState(name) {
+            return {
+                box: document.querySelector('[data-tm-combobox="' + name + '"]'),
+                hidden: document.getElementById('tm_' + name + '_id'),
+                input: document.getElementById('tm_' + name + '_display'),
+                menu: document.getElementById('tm_' + name + '_menu')
+            };
+        }
+
+        function setComboboxValue(name, idValue) {
+            const state = getComboboxState(name);
+            if (!state.hidden || !state.input || !state.menu) {
+                return;
+            }
+
+            const targetId = String(idValue);
+            const options = state.menu.querySelectorAll('.tm-combobox-option');
+            let selectedTitle = '';
+
+            options.forEach(function(option) {
+                const isMatch = option.getAttribute('data-id') === targetId;
+                option.classList.toggle('is-selected', isMatch);
+                if (isMatch) {
+                    selectedTitle = option.getAttribute('data-title') || option.textContent.trim();
+                }
+            });
+
+            if (selectedTitle === '' && options.length > 0) {
+                selectedTitle = options[0].getAttribute('data-title') || options[0].textContent.trim();
+                state.hidden.value = options[0].getAttribute('data-id') || '0';
+            } else {
+                state.hidden.value = targetId;
+            }
+
+            state.input.value = state.hidden.value === '0' ? '' : selectedTitle;
+        }
+
+        function initCombobox(name) {
+            const state = getComboboxState(name);
+            if (!state.box || !state.hidden || !state.input || !state.menu) {
+                return;
+            }
+
+            const options = state.menu.querySelectorAll('.tm-combobox-option');
+
+            function openMenu() {
+                state.box.classList.add('is-open');
+            }
+
+            function closeMenu() {
+                state.box.classList.remove('is-open');
+            }
+
+            function filterOptions() {
+                const query = state.input.value.toLowerCase().trim();
+                options.forEach(function(option) {
+                    const title = (option.getAttribute('data-title') || '').toLowerCase();
+                    option.hidden = query !== '' && !title.includes(query);
+                });
+            }
+
+            state.input.addEventListener('focus', function() {
+                filterOptions();
+                openMenu();
+            });
+
+            state.input.addEventListener('input', function() {
+                filterOptions();
+                openMenu();
+            });
+
+            options.forEach(function(option) {
+                option.addEventListener('click', function() {
+                    setComboboxValue(name, option.getAttribute('data-id') || '0');
+                    closeMenu();
+                });
+            });
+
+            document.addEventListener('click', function(event) {
+                if (!state.box.contains(event.target)) {
+                    closeMenu();
+                }
+            });
+
+            setComboboxValue(name, state.hidden.value || '0');
+        }
+
+        function updateStorageValue() {
+            if (toggle && hiddenInput) {
+                hiddenInput.value = toggle.checked ? 'database' : 'file';
+            }
+        }
+
+        function resetEditMode() {
+            editingSlugInput.value = '';
+            modalTitle.textContent = 'Add Template';
+            submitLabel.textContent = 'Create Template';
+            templateNameInput.value = '';
+            setComboboxValue('header', '0');
+            setComboboxValue('footer', '0');
+            toggle.checked = false;
+            updateStorageValue();
+            validateTemplateNameDuplicate();
+        }
+
+        function setEditModeFromButton(button) {
+            const isEditing = button.getAttribute('data-editing') === '1';
+            if (!isEditing) {
+                resetEditMode();
+                return;
+            }
+
+            editingSlugInput.value = button.getAttribute('data-template-slug') || '';
+            templateNameInput.value = button.getAttribute('data-template-name') || '';
+            setComboboxValue('header', button.getAttribute('data-header-id') || '0');
+            setComboboxValue('footer', button.getAttribute('data-footer-id') || '0');
+            toggle.checked = (button.getAttribute('data-storage') || 'file') === 'database';
+            updateStorageValue();
+
+            modalTitle.textContent = 'Edit Template';
+            submitLabel.textContent = 'Save Changes';
+            validateTemplateNameDuplicate();
+        }
+
+        function openModal() {
+            if (!modal) {
+                return;
+            }
+            modal.setAttribute('data-state', 'open');
+            modal.setAttribute('aria-hidden', 'false');
+            modal.classList.remove('is-closing');
+            modal.classList.add('is-entering');
+            document.body.classList.add('tm-modal-open');
+
+            setTimeout(function() {
+                modal.classList.remove('is-entering');
+            }, 180);
+        }
+
+        function closeModal() {
+            if (!modal || modal.getAttribute('data-state') !== 'open') {
+                return;
+            }
+
+            modal.classList.remove('is-entering');
+            modal.classList.add('is-closing');
+            modal.setAttribute('aria-hidden', 'true');
+
+            setTimeout(function() {
+                modal.setAttribute('data-state', 'closed');
+                modal.classList.remove('is-closing');
+                document.body.classList.remove('tm-modal-open');
+                const url = new URL(window.location.href);
+                url.searchParams.delete('action');
+                url.searchParams.delete('template');
+                window.history.replaceState({}, '', url);
+            }, 140);
+        }
+
+        function toStatusLabel(status) {
+            if (!status) {
+                return 'publish';
+            }
+
+            const normalized = String(status).replace(/-/g, ' ');
+            return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+        }
+
+        function renderUsageList() {
+            if (!usageList || !usageEmpty) {
+                return;
+            }
+
+            const items = usageState.items.filter(function(item) {
+                return usageState.filter === 'all' || item.post_type === usageState.filter;
+            });
+
+            usageList.innerHTML = '';
+
+            if (items.length === 0) {
+                usageEmpty.style.display = 'block';
+                usageEmpty.textContent = 'No content in this filter.';
+                return;
+            }
+
+            usageEmpty.style.display = 'none';
+
+            items.forEach(function(item) {
+                const li = document.createElement('li');
+                li.className = 'tm-usage-item';
+
+                const titleWrap = document.createElement('div');
+                titleWrap.className = 'tm-usage-item-main';
+
+                const title = document.createElement('strong');
+                title.textContent = item.title || '';
+                titleWrap.appendChild(title);
+
+                const meta = document.createElement('span');
+                meta.className = 'tm-usage-item-meta';
+                meta.textContent = (item.type || 'Post') + ' - ' + toStatusLabel(item.status);
+                titleWrap.appendChild(meta);
+
+                li.appendChild(titleWrap);
+
+                if (item.edit_link) {
+                    const action = document.createElement('a');
+                    action.href = item.edit_link;
+                    action.className = 'tm-usage-edit';
+                    action.textContent = '<?php echo esc_js(__('Edit', 'template-manager')); ?>';
+                    li.appendChild(action);
+                }
+
+                usageList.appendChild(li);
+            });
+        }
+
+        function renderUsageFilters() {
+            if (!usageFilters) {
+                return;
+            }
+
+            usageFilters.innerHTML = '';
+
+            const allButton = document.createElement('button');
+            allButton.type = 'button';
+            allButton.className = 'tm-usage-filter' + (usageState.filter === 'all' ? ' is-active' : '');
+            allButton.textContent = 'All';
+            allButton.addEventListener('click', function() {
+                usageState.filter = 'all';
+                renderUsageFilters();
+                renderUsageList();
+            });
+            usageFilters.appendChild(allButton);
+
+            const types = {};
+            usageState.items.forEach(function(item) {
+                if (!types[item.post_type]) {
+                    types[item.post_type] = item.type || item.post_type;
+                }
+            });
+
+            Object.keys(types).forEach(function(postTypeKey) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'tm-usage-filter' + (usageState.filter === postTypeKey ? ' is-active' : '');
+                button.textContent = types[postTypeKey];
+                button.addEventListener('click', function() {
+                    usageState.filter = postTypeKey;
+                    renderUsageFilters();
+                    renderUsageList();
+                });
+                usageFilters.appendChild(button);
+            });
+        }
+
+        function openUsageModal(templateSlug, templateName) {
+            if (!usageModal || !usageList || !usageEmpty || !usageSubtitle) {
+                return;
+            }
+
+            usageState.items = Array.isArray(usageMap[templateSlug]) ? usageMap[templateSlug] : [];
+            usageState.filter = 'all';
+            usageSubtitle.textContent = templateName;
+            renderUsageFilters();
+            renderUsageList();
+
+            usageModal.setAttribute('data-state', 'open');
+            usageModal.setAttribute('aria-hidden', 'false');
+        }
+
+        function closeUsageModal() {
+            if (!usageModal) {
+                return;
+            }
+
+            usageModal.setAttribute('data-state', 'closed');
+            usageModal.setAttribute('aria-hidden', 'true');
+        }
+
+        openButtons.forEach(function(button) {
+            button.addEventListener('click', function() {
+                if (button.getAttribute('data-editing') === '1') {
+                    setEditModeFromButton(button);
+                } else {
+                    resetEditMode();
+                }
+                openModal();
+            });
+        });
+
+        closeButtons.forEach(function(button) {
+            button.addEventListener('click', closeModal);
+        });
+
+        usageOpenButtons.forEach(function(button) {
+            button.addEventListener('click', function() {
+                openUsageModal(
+                    button.getAttribute('data-template-slug') || '',
+                    button.getAttribute('data-template-name') || ''
+                );
+            });
+        });
+
+        usageCloseButtons.forEach(function(button) {
+            button.addEventListener('click', closeUsageModal);
+        });
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                if (usageModal && usageModal.getAttribute('data-state') === 'open') {
+                    closeUsageModal();
+                } else {
+                    closeModal();
+                }
+            }
+        });
+
+        initCombobox('header');
+        initCombobox('footer');
+
+        if (templateNameInput) {
+            templateNameInput.addEventListener('input', validateTemplateNameDuplicate);
+            templateNameInput.addEventListener('blur', validateTemplateNameDuplicate);
+            validateTemplateNameDuplicate();
+        }
+
+        if (templateForm) {
+            templateForm.addEventListener('submit', function(event) {
+                if (!validateTemplateNameDuplicate()) {
+                    event.preventDefault();
+                }
+            });
+        }
+
+        if (toggle) {
+            toggle.addEventListener('change', updateStorageValue);
+            updateStorageValue();
+        }
+
+        if (modal && modal.getAttribute('data-state') === 'open') {
+            document.body.classList.add('tm-modal-open');
+        }
+    });
+</script>

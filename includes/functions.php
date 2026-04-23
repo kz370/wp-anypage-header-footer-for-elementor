@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Template Manager Utility Functions
  */
@@ -10,7 +11,8 @@ if (!defined('ABSPATH')) {
 /**
  * Register custom template type for theme
  */
-function tm_register_theme_support() {
+function tm_register_theme_support()
+{
     // Theme support functions here
     // Custom template types will be handled by Elementor integration
 }
@@ -19,16 +21,21 @@ add_action('after_setup_theme', 'tm_register_theme_support');
 /**
  * Get available header sources - pages/posts whose title contains "header".
  */
-function tm_get_available_headers() {
+function tm_get_available_headers()
+{
     $headers = [];
 
     // 1. Elementor Headers (by type meta)
     if (class_exists('\Elementor\Plugin')) {
         $elementor_headers = get_posts([
-            'post_type'      => 'elementor_library',
-            'posts_per_page' => -1,
-            'post_status'    => 'publish',
-            'meta_query'     => [[
+            'post_type'              => 'elementor_library',
+            'posts_per_page'         => -1,
+            'post_status'            => 'publish',
+            'no_found_rows'          => true,
+            'update_post_meta_cache' => false,
+            'update_post_term_cache' => false,
+            // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+            'meta_query'             => [[
                 'key'   => '_type',
                 'value' => 'header',
             ]],
@@ -68,15 +75,20 @@ function tm_get_available_headers() {
 /**
  * Get available footer sources - pages/posts whose title contains "footer".
  */
-function tm_get_available_footers() {
+function tm_get_available_footers()
+{
     $footers = [];
 
     // 1. Elementor Footers (by type meta)
     if (class_exists('\Elementor\Plugin')) {
         $elementor_footers = get_posts([
-            'post_type'      => 'elementor_library',
-            'posts_per_page' => -1,
-            'post_status'    => 'publish',
+            'post_type'              => 'elementor_library',
+            'posts_per_page'         => -1,
+            'post_status'            => 'publish',
+            'no_found_rows'          => true,
+            'update_post_meta_cache' => false,
+            'update_post_term_cache' => false,
+            // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
             'meta_query'     => [[
                 'key'   => '_type',
                 'value' => 'footer',
@@ -117,7 +129,8 @@ function tm_get_available_footers() {
 /**
  * Get Elementor IDs embedded in a template file or its associated header/footer files.
  */
-function tm_get_template_elementor_ids($file) {
+function tm_get_template_elementor_ids($file)
+{
     $ids = array(
         'header_id' => 0,
         'footer_id' => 0,
@@ -129,7 +142,7 @@ function tm_get_template_elementor_ids($file) {
 
     $directory = trailingslashit(dirname($file));
     $slug_base = str_replace(['template-cu-', '.php'], '', basename($file));
-    
+
     $header_file = $directory . 'header-' . $slug_base . '.php';
     $footer_file = $directory . 'footer-' . $slug_base . '.php';
 
@@ -166,7 +179,8 @@ function tm_get_template_elementor_ids($file) {
 /**
  * Collect all registered custom templates from the plugin, theme, and database.
  */
-function tm_get_registered_templates() {
+function tm_get_registered_templates()
+{
     $templates = array();
 
     // 1. Get database-stored templates
@@ -261,7 +275,8 @@ function tm_get_registered_templates() {
 /**
  * Find the preferred template file or data for a selected template slug.
  */
-function tm_get_template_file_by_slug($slug) {
+function tm_get_template_file_by_slug($slug)
+{
     foreach (tm_get_registered_templates() as $template) {
         if ($template['slug'] === $slug) {
             if ($template['source'] === 'database') {
@@ -279,7 +294,8 @@ function tm_get_template_file_by_slug($slug) {
 /**
  * Create custom template file in theme directory
  */
-function tm_create_custom_template($slug, $content) {
+function tm_create_custom_template($slug, $content)
+{
     // Get active theme directory
     $theme_dir = get_stylesheet_directory();
 
@@ -311,7 +327,8 @@ function tm_create_custom_template($slug, $content) {
 /**
  * Activate plugin functions
  */
-function tm_activate_functions() {
+function tm_activate_functions()
+{
     // Plugin activation cleanup
     if (!wp_next_scheduled('tm_plugin_activation')) {
         wp_schedule_single_event(time(), 'tm_plugin_activation');
@@ -321,17 +338,19 @@ function tm_activate_functions() {
 /**
  * Sanitize template name for slug
  */
-function tm_slugify($name) {
+function tm_slugify($name)
+{
     return sanitize_title($name);
 }
 
 /**
  * Get page template info
  */
-function tm_get_template_info() {
+function tm_get_template_info()
+{
     if (is_page()) {
         $template = get_page_template_slug();
-        
+
         return [
             'name' => get_the_title(),
             'slug' => $template,
@@ -351,8 +370,9 @@ function tm_get_template_info() {
 /**
  * Register custom template type for themes using this plugin
  */
-function tm_register_template_type($template_types) {
+function tm_register_template_type($template_types)
+{
     return array_merge($template_types, [
-        'cu-custom-template' => __('Custom Template', 'template-manager'),
+        'cu-custom-template' => __('Custom Template', 'anypage-header-footer-for-elementor'),
     ]);
 }

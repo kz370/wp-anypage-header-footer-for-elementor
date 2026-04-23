@@ -25,7 +25,7 @@ $available_headers = tm_get_available_headers();
 $available_footers = tm_get_available_footers();
 $existing_templates = tm_get_registered_templates();
 
-$selected_header_label = __('Default', 'template-manager');
+$selected_header_label = __('Default', 'anypage-header-footer-for-elementor');
 foreach ($available_headers as $header) {
     if ((int) $header['id'] === (int) $header_id) {
         $selected_header_label = $header['title'];
@@ -33,7 +33,7 @@ foreach ($available_headers as $header) {
     }
 }
 
-$selected_footer_label = __('Default', 'template-manager');
+$selected_footer_label = __('Default', 'anypage-header-footer-for-elementor');
 foreach ($available_footers as $footer) {
     if ((int) $footer['id'] === (int) $footer_id) {
         $selected_footer_label = $footer['title'];
@@ -53,7 +53,7 @@ if (
     && 'edit' === sanitize_text_field(wp_unslash($_GET['action']))
     && current_user_can('manage_options')
 ) {
-    $requested_slug = sanitize_file_name(wp_unslash($_GET['template']));
+    $requested_slug = esc_attr(sanitize_file_name(wp_unslash($_GET['template'])));
 
     if (isset($templates_by_slug[$requested_slug])) {
         $template = $templates_by_slug[$requested_slug];
@@ -65,7 +65,7 @@ if (
         $is_edit_mode = true;
         $open_modal = true;
     } else {
-        $errors[] = esc_html__('Template not found.', 'template-manager');
+        $errors[] = esc_html__('Template not found.', 'anypage-header-footer-for-elementor');
     }
 }
 
@@ -74,15 +74,15 @@ if (
     && current_user_can('manage_options')
     && check_admin_referer('tm_create_template', 'tm_nonce')
 ) {
-    $template_name = sanitize_text_field(wp_unslash($_POST['tm_template_name'] ?? ''));
-    $header_id = absint($_POST['tm_header_id'] ?? 0);
-    $footer_id = absint($_POST['tm_footer_id'] ?? 0);
-    $storage_type = sanitize_text_field($_POST['tm_storage_type'] ?? 'file');
-    $editing_slug = sanitize_file_name(wp_unslash($_POST['tm_editing_slug'] ?? ''));
+    $template_name = esc_html(sanitize_text_field(wp_unslash($_POST['tm_template_name'] ?? '')));
+    $header_id = esc_attr(absint(wp_unslash($_POST['tm_header_id'] ?? 0)));
+    $footer_id = esc_attr(absint(wp_unslash($_POST['tm_footer_id'] ?? 0)));
+    $storage_type = esc_attr(sanitize_text_field(wp_unslash($_POST['tm_storage_type'] ?? 'file')));
+    $editing_slug = esc_attr(sanitize_file_name(wp_unslash($_POST['tm_editing_slug'] ?? '')));
     $is_edit_mode = '' !== $editing_slug;
 
     if ('' === $template_name) {
-        $errors[] = esc_html__('Template name is required.', 'template-manager');
+        $errors[] = esc_html__('Template name is required.', 'anypage-header-footer-for-elementor');
     }
 
     if (!in_array($storage_type, array('file', 'database'), true)) {
@@ -92,7 +92,7 @@ if (
     $existing_template = null;
     if ($is_edit_mode) {
         if (!isset($templates_by_slug[$editing_slug])) {
-            $errors[] = esc_html__('The selected template no longer exists.', 'template-manager');
+            $errors[] = esc_html__('The selected template no longer exists.', 'anypage-header-footer-for-elementor');
         } else {
             $existing_template = $templates_by_slug[$editing_slug];
         }
@@ -104,11 +104,11 @@ if (
     }
 
     if (empty($errors) && !$is_edit_mode && isset($templates_by_slug[$new_slug])) {
-        $errors[] = esc_html__('A template with this generated file name already exists.', 'template-manager');
+        $errors[] = esc_html__('A template with this generated file name already exists.', 'anypage-header-footer-for-elementor');
     }
 
     if (empty($errors) && $is_edit_mode && $editing_slug !== $new_slug && isset($templates_by_slug[$new_slug])) {
-        $errors[] = esc_html__('Another template already uses this generated file name.', 'template-manager');
+        $errors[] = esc_html__('Another template already uses this generated file name.', 'anypage-header-footer-for-elementor');
     }
 
     if (empty($errors)) {
@@ -131,7 +131,7 @@ if (
             foreach ($old_files as $old_file) {
                 $old_path = $write_directory . $old_file;
                 if (file_exists($old_path)) {
-                    @unlink($old_path);
+                    wp_delete_file($old_path);
                 }
             }
         }
@@ -144,8 +144,8 @@ if (
             );
             update_option('tm_database_templates', $db_templates);
             $success_message = $is_edit_mode
-                ? esc_html__('Template updated.', 'template-manager')
-                : esc_html__('Template saved.', 'template-manager');
+                ? esc_html__('Template updated.', 'anypage-header-footer-for-elementor')
+                : esc_html__('Template saved.', 'anypage-header-footer-for-elementor');
         } else {
             if ($is_edit_mode && $existing_template && 'database' === $existing_template['source']) {
                 update_option('tm_database_templates', $db_templates);
@@ -163,15 +163,16 @@ if (
 
             if (!empty($files_created)) {
                 $success_message = $is_edit_mode
-                    ? esc_html__('Template updated.', 'template-manager')
+                    ? esc_html__('Template updated.', 'anypage-header-footer-for-elementor')
                     : sprintf(
-                        esc_html__('Created: %s', 'template-manager'),
-                        implode(', ', $files_created)
+                        /* translators: %s: File names */
+                        esc_html__('Created: %s', 'anypage-header-footer-for-elementor'),
+                        esc_html(implode(', ', $files_created))
                     );
             } else {
                 $errors[] = $is_edit_mode
-                    ? esc_html__('Failed to update template files.', 'template-manager')
-                    : esc_html__('Failed to create files.', 'template-manager');
+                    ? /* translators: %s: File names */ esc_html__('Failed to update template files.', 'anypage-header-footer-for-elementor')
+                    : /* translators: %s: File names */ esc_html__('Failed to create files.', 'anypage-header-footer-for-elementor');
             }
         }
     }
@@ -207,7 +208,8 @@ if (
         if (isset($db_templates[$template_slug])) {
             unset($db_templates[$template_slug]);
             update_option('tm_database_templates', $db_templates);
-            $success_message = esc_html__('Template removed.', 'template-manager');
+            /* translators: %s: Template name */
+            $success_message = esc_html__('Template removed.', 'anypage-header-footer-for-elementor');
         } else {
             $slug_base = str_replace(array('template-cu-', '.php'), '', $template_slug);
 
@@ -220,11 +222,12 @@ if (
             foreach ($files_to_delete as $file) {
                 $path = $write_directory . $file;
                 if (file_exists($path)) {
-                    @unlink($path);
+                    wp_delete_file($path);
                 }
             }
 
-            $success_message = esc_html__('Template files deleted.', 'template-manager');
+            /* translators: %s: Template name */
+            $success_message = esc_html__('Template files deleted.', 'anypage-header-footer-for-elementor');
         }
 
         $existing_templates = tm_get_registered_templates();
@@ -252,23 +255,28 @@ if (!empty($existing_templates)) {
         $post_types = array('page', 'post');
     }
 
+
     $slug_placeholders = implode(', ', array_fill(0, count($template_slugs), '%s'));
     $type_placeholders = implode(', ', array_fill(0, count($post_types), '%s'));
-    $query = $wpdb->prepare(
-        "
-        SELECT pm.meta_value AS template_slug, p.ID, p.post_title, p.post_type, p.post_status
-        FROM {$wpdb->postmeta} pm
-        INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
-        WHERE pm.meta_key = '_wp_page_template'
-          AND pm.meta_value IN ($slug_placeholders)
-          AND p.post_type IN ($type_placeholders)
-          AND p.post_status NOT IN ('trash', 'auto-draft')
-        ORDER BY p.post_type ASC, p.post_title ASC
-        ",
-        array_merge($template_slugs, $post_types)
-    );
+    $sql = "
+            SELECT pm.meta_value AS template_slug, p.ID, p.post_title, p.post_type, p.post_status
+            FROM {$wpdb->postmeta} pm
+            INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+            WHERE pm.meta_key = '_wp_page_template'
+              AND pm.meta_value IN ($slug_placeholders)
+              AND p.post_type IN ($type_placeholders)
+              AND p.post_status NOT IN ('trash', 'auto-draft')
+            ORDER BY p.post_type ASC, p.post_title ASC
+        ";
+    $args = array_merge($template_slugs, $post_types);
 
-    $usage_rows = $wpdb->get_results($query, ARRAY_A);
+    $cache_key = 'tm_usage_' . md5(implode(',', $args));
+    $usage_rows = wp_cache_get($cache_key, 'tm_templates');
+    if (false === $usage_rows) {
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
+        $usage_rows = $wpdb->get_results($wpdb->prepare($sql, ...$args), ARRAY_A);
+        wp_cache_set($cache_key, $usage_rows, 'tm_templates', 300);
+    }
 
     foreach ($template_slugs as $slug) {
         $template_usage_counts[$slug] = 0;
@@ -284,8 +292,10 @@ if (!empty($existing_templates)) {
 
         $title = trim((string) $row['post_title']);
         if ('' === $title) {
+
             $title = sprintf(
-                esc_html__('(No title) #%d', 'template-manager'),
+                /* translators: %d: Post ID */
+                esc_html__('(No title) #%d', 'anypage-header-footer-for-elementor'),
                 $post_id
             );
         }
@@ -331,13 +341,13 @@ $existing_template_slugs = array_map(
     <div class="tm-shell">
         <div class="tm-header-bar">
             <div>
-                <h1><?php esc_html_e('Template Settings', 'template-manager'); ?></h1>
-                <p><?php esc_html_e('Create and manage templates from one fast page.', 'template-manager'); ?></p>
+                <h1><?php esc_html_e('Template Settings', 'anypage-header-footer-for-elementor'); ?></h1>
+                <p><?php esc_html_e('Create and manage templates from one fast page.', 'anypage-header-footer-for-elementor'); ?></p>
             </div>
 
             <button type="button" class="tm-primary-btn" data-tm-open-modal>
                 <span class="dashicons dashicons-plus-alt2"></span>
-                <?php esc_html_e('Add Template', 'template-manager'); ?>
+                <?php esc_html_e('Add Template', 'anypage-header-footer-for-elementor'); ?>
             </button>
         </div>
 
@@ -355,12 +365,13 @@ $existing_template_slugs = array_map(
 
         <div class="tm-table-card">
             <div class="tm-table-head">
-                <h2><?php esc_html_e('Templates', 'template-manager'); ?></h2>
+                <h2><?php esc_html_e('Templates', 'anypage-header-footer-for-elementor'); ?></h2>
                 <span class="tm-total-chip">
                     <?php
                     printf(
-                        esc_html__('Total: %d', 'template-manager'),
-                        $total_templates
+                        /* translators: %d: Total templates */
+                        esc_html__('Total: %d', 'anypage-header-footer-for-elementor'),
+                        esc_html($total_templates)
                     );
                     ?>
                 </span>
@@ -369,33 +380,34 @@ $existing_template_slugs = array_map(
             <?php if (empty($paged_templates)) : ?>
                 <div class="tm-empty-state">
                     <span class="dashicons dashicons-layout"></span>
-                    <p><?php esc_html_e('No templates created yet.', 'template-manager'); ?></p>
+                    <p><?php esc_html_e('No templates created yet.', 'anypage-header-footer-for-elementor'); ?></p>
                 </div>
             <?php else : ?>
                 <div class="tm-table-wrap">
                     <table class="widefat fixed striped tm-template-table">
                         <thead>
                             <tr>
-                                <th scope="col"><?php esc_html_e('Name', 'template-manager'); ?></th>
-                                <th scope="col"><?php esc_html_e('Template Name', 'template-manager'); ?></th>
-                                <th scope="col"><?php esc_html_e('Type', 'template-manager'); ?></th>
-                                <th scope="col"><?php esc_html_e('Used By', 'template-manager'); ?></th>
-                                <th scope="col" class="tm-actions-col"><?php esc_html_e('Actions', 'template-manager'); ?></th>
+                                <th scope="col"><?php esc_html_e('Name', 'anypage-header-footer-for-elementor'); ?></th>
+                                <th scope="col"><?php esc_html_e('Template Name', 'anypage-header-footer-for-elementor'); ?></th>
+                                <th scope="col"><?php esc_html_e('Type', 'anypage-header-footer-for-elementor'); ?></th>
+                                <th scope="col"><?php esc_html_e('Used By', 'anypage-header-footer-for-elementor'); ?></th>
+                                <th scope="col" class="tm-actions-col"><?php esc_html_e('Actions', 'anypage-header-footer-for-elementor'); ?></th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($paged_templates as $template) : ?>
                                 <?php
                                 $template_type = ('database' === $template['source'])
-                                    ? esc_html__('Virtual (DB)', 'template-manager')
-                                    : esc_html__('Real File', 'template-manager');
+                                    ? esc_html__('Virtual (DB)', 'anypage-header-footer-for-elementor')
+                                    : esc_html__('Real File', 'anypage-header-footer-for-elementor');
                                 $can_manage = !empty($template['has_theme_copy']) || !empty($template['has_db_copy']);
                                 $usage_count = isset($template_usage_counts[$template['slug']])
                                     ? (int) $template_usage_counts[$template['slug']]
                                     : 0;
                                 $usage_label = sprintf(
-                                    esc_html(_n('%d page', '%d pages', $usage_count, 'template-manager')),
-                                    $usage_count
+                                    /* translators: %d: Number of pages using the template */
+                                    esc_html(_n('%d page', '%d pages', $usage_count, 'anypage-header-footer-for-elementor')),
+                                    esc_html($usage_count)
                                 );
                                 ?>
                                 <tr>
@@ -414,7 +426,7 @@ $existing_template_slugs = array_map(
                                                 data-tm-usage-open="1"
                                                 data-template-slug="<?php echo esc_attr($template['slug']); ?>"
                                                 data-template-name="<?php echo esc_attr($template['name']); ?>"
-                                                title="<?php esc_attr_e('View pages using this template', 'template-manager'); ?>">
+                                                title="<?php esc_attr_e('View pages using this template', 'anypage-header-footer-for-elementor'); ?>">
                                                 <?php echo esc_html($usage_label); ?>
                                             </button>
                                         <?php else : ?>
@@ -433,20 +445,20 @@ $existing_template_slugs = array_map(
                                                 data-header-id="<?php echo esc_attr((string) $template['header_id']); ?>"
                                                 data-footer-id="<?php echo esc_attr((string) $template['footer_id']); ?>"
                                                 data-storage="<?php echo esc_attr('database' === $template['source'] ? 'database' : 'file'); ?>"
-                                                aria-label="<?php echo esc_attr(sprintf(__('Edit %s', 'template-manager'), $template['name'])); ?>"
-                                                title="<?php echo esc_attr__('Edit template', 'template-manager'); ?>">
+                                                aria-label="<?php echo esc_attr(sprintf(/* translators: %s: Template name */__('Edit %s', 'anypage-header-footer-for-elementor'), esc_html($template['name']))); ?>"
+                                                title="<?php echo esc_attr__('Edit template', 'anypage-header-footer-for-elementor'); ?>">
                                                 <span class="dashicons dashicons-edit"></span>
                                             </button>
                                             <a
                                                 class="tm-icon-btn danger"
                                                 href="<?php echo esc_url(wp_nonce_url(admin_url('admin.php?page=tm-templates&action=delete&template=' . rawurlencode($template['slug'])), 'tm_delete_template_' . $template['slug'])); ?>"
-                                                aria-label="<?php echo esc_attr(sprintf(__('Delete %s', 'template-manager'), $template['name'])); ?>"
-                                                title="<?php echo esc_attr__('Delete template', 'template-manager'); ?>"
-                                                onclick="return confirm('<?php echo esc_js(__('Delete this template?', 'template-manager')); ?>');">
+                                                aria-label="<?php echo esc_attr(sprintf(/* translators: %s: Template name */__('Delete %s', 'anypage-header-footer-for-elementor'), esc_html($template['name']))); ?>"
+                                                title="<?php echo esc_attr__('Delete template', 'anypage-header-footer-for-elementor'); ?>"
+                                                onclick="return confirm('<?php echo esc_js(__('Delete this template?', 'anypage-header-footer-for-elementor')); ?>');">
                                                 <span class="dashicons dashicons-trash"></span>
                                             </a>
                                         <?php else : ?>
-                                            <span class="tm-readonly-pill"><?php esc_html_e('Plugin', 'template-manager'); ?></span>
+                                            <span class="tm-readonly-pill"><?php esc_html_e('Plugin', 'anypage-header-footer-for-elementor'); ?></span>
                                         <?php endif; ?>
                                     </td>
                                 </tr>
@@ -481,8 +493,8 @@ $existing_template_slugs = array_map(
 
         <div class="tm-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="tm-modal-title">
             <div class="tm-modal-header">
-                <h2 id="tm-modal-title"><?php echo esc_html($is_edit_mode ? __('Edit Template', 'template-manager') : __('Add Template', 'template-manager')); ?></h2>
-                <button type="button" class="tm-close-btn" data-tm-close-modal aria-label="<?php esc_attr_e('Close', 'template-manager'); ?>">
+                <h2 id="tm-modal-title"><?php echo esc_html($is_edit_mode ? __('Edit Template', 'anypage-header-footer-for-elementor') : __('Add Template', 'anypage-header-footer-for-elementor')); ?></h2>
+                <button type="button" class="tm-close-btn" data-tm-close-modal aria-label="<?php esc_attr_e('Close', 'anypage-header-footer-for-elementor'); ?>">
                     <span class="dashicons dashicons-no-alt"></span>
                 </button>
             </div>
@@ -493,13 +505,13 @@ $existing_template_slugs = array_map(
 
                 <div class="tm-field-grid">
                     <label class="tm-field tm-field--full">
-                        <span><?php esc_html_e('Name', 'template-manager'); ?></span>
-                        <input id="tm_template_name" type="text" name="tm_template_name" value="<?php echo esc_attr($template_name); ?>" placeholder="<?php echo esc_attr__('Landing Page', 'template-manager'); ?>">
+                        <span><?php esc_html_e('Name', 'anypage-header-footer-for-elementor'); ?></span>
+                        <input id="tm_template_name" type="text" name="tm_template_name" value="<?php echo esc_attr($template_name); ?>" placeholder="<?php echo esc_attr__('Landing Page', 'anypage-header-footer-for-elementor'); ?>">
                         <small id="tm_template_name_error" class="tm-field-error" aria-live="polite"></small>
                     </label>
 
                     <label class="tm-field">
-                        <span><?php esc_html_e('Header', 'template-manager'); ?></span>
+                        <span><?php esc_html_e('Header', 'anypage-header-footer-for-elementor'); ?></span>
                         <div class="tm-combobox" data-tm-combobox="header">
                             <input type="hidden" id="tm_header_id" name="tm_header_id" value="<?php echo esc_attr((string) $header_id); ?>">
                             <input
@@ -507,10 +519,10 @@ $existing_template_slugs = array_map(
                                 class="tm-combobox-input"
                                 type="text"
                                 autocomplete="off"
-                                placeholder="<?php echo esc_attr__('Search header', 'template-manager'); ?>"
+                                placeholder="<?php echo esc_attr__('Search header', 'anypage-header-footer-for-elementor'); ?>"
                                 value="<?php echo esc_attr($header_id ? $selected_header_label : ''); ?>">
                             <div class="tm-combobox-menu" id="tm_header_menu">
-                                <button type="button" class="tm-combobox-option" data-id="0" data-title="<?php echo esc_attr__('Default', 'template-manager'); ?>"><?php esc_html_e('Default', 'template-manager'); ?></button>
+                                <button type="button" class="tm-combobox-option" data-id="0" data-title="<?php echo esc_attr__('Default', 'anypage-header-footer-for-elementor'); ?>"><?php esc_html_e('Default', 'anypage-header-footer-for-elementor'); ?></button>
                                 <?php foreach ($available_headers as $header) : ?>
                                     <button
                                         type="button"
@@ -525,7 +537,7 @@ $existing_template_slugs = array_map(
                     </label>
 
                     <label class="tm-field">
-                        <span><?php esc_html_e('Footer', 'template-manager'); ?></span>
+                        <span><?php esc_html_e('Footer', 'anypage-header-footer-for-elementor'); ?></span>
                         <div class="tm-combobox" data-tm-combobox="footer">
                             <input type="hidden" id="tm_footer_id" name="tm_footer_id" value="<?php echo esc_attr((string) $footer_id); ?>">
                             <input
@@ -533,10 +545,10 @@ $existing_template_slugs = array_map(
                                 class="tm-combobox-input"
                                 type="text"
                                 autocomplete="off"
-                                placeholder="<?php echo esc_attr__('Search footer', 'template-manager'); ?>"
+                                placeholder="<?php echo esc_attr__('Search footer', 'anypage-header-footer-for-elementor'); ?>"
                                 value="<?php echo esc_attr($footer_id ? $selected_footer_label : ''); ?>">
                             <div class="tm-combobox-menu" id="tm_footer_menu">
-                                <button type="button" class="tm-combobox-option" data-id="0" data-title="<?php echo esc_attr__('Default', 'template-manager'); ?>"><?php esc_html_e('Default', 'template-manager'); ?></button>
+                                <button type="button" class="tm-combobox-option" data-id="0" data-title="<?php echo esc_attr__('Default', 'anypage-header-footer-for-elementor'); ?>"><?php esc_html_e('Default', 'anypage-header-footer-for-elementor'); ?></button>
                                 <?php foreach ($available_footers as $footer) : ?>
                                     <button
                                         type="button"
@@ -551,25 +563,25 @@ $existing_template_slugs = array_map(
                     </label>
 
                     <div class="tm-field tm-storage-field">
-                        <span><?php esc_html_e('Template Type', 'template-manager'); ?></span>
+                        <span><?php esc_html_e('Template Type', 'anypage-header-footer-for-elementor'); ?></span>
                         <div class="tm-storage-toggle">
-                            <span class="tm-toggle-label"><?php esc_html_e('Real File', 'template-manager'); ?></span>
+                            <span class="tm-toggle-label"><?php esc_html_e('Real File', 'anypage-header-footer-for-elementor'); ?></span>
                             <label class="tm-switch">
                                 <input type="checkbox" id="tm_storage_toggle" <?php checked($storage_type, 'database'); ?>>
                                 <span class="tm-slider"></span>
                             </label>
-                            <span class="tm-toggle-label"><?php esc_html_e('Virtual (DB)', 'template-manager'); ?></span>
+                            <span class="tm-toggle-label"><?php esc_html_e('Virtual (DB)', 'anypage-header-footer-for-elementor'); ?></span>
                         </div>
-                        <p class="tm-help-note"><?php esc_html_e('Real File is safer for long-term use: templates stay in your theme, so uninstalling this plugin will not remove them.', 'template-manager'); ?></p>
+                        <p class="tm-help-note"><?php esc_html_e('Real File is safer for long-term use: templates stay in your theme, so uninstalling this plugin will not remove them.', 'anypage-header-footer-for-elementor'); ?></p>
                         <input type="hidden" name="tm_storage_type" id="tm_storage_type_input" value="<?php echo esc_attr($storage_type); ?>">
                     </div>
                 </div>
 
                 <div class="tm-modal-actions">
-                    <button type="button" class="tm-secondary-btn" data-tm-close-modal><?php esc_html_e('Cancel', 'template-manager'); ?></button>
+                    <button type="button" class="tm-secondary-btn" data-tm-close-modal><?php esc_html_e('Cancel', 'anypage-header-footer-for-elementor'); ?></button>
                     <button type="submit" name="tm_submit_template" class="tm-primary-btn" id="tm_submit_btn">
                         <span class="dashicons dashicons-saved"></span>
-                        <span id="tm_submit_label"><?php echo esc_html($is_edit_mode ? __('Save Changes', 'template-manager') : __('Create Template', 'template-manager')); ?></span>
+                        <span id="tm_submit_label"><?php echo esc_html($is_edit_mode ? __('Save Changes', 'anypage-header-footer-for-elementor') : __('Create Template', 'anypage-header-footer-for-elementor')); ?></span>
                     </button>
                 </div>
             </form>
@@ -580,15 +592,15 @@ $existing_template_slugs = array_map(
         <div class="tm-usage-modal-backdrop" data-tm-usage-close></div>
         <div class="tm-usage-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="tm-usage-title">
             <div class="tm-usage-modal-header">
-                <h3 id="tm-usage-title"><?php esc_html_e('Template Usage', 'template-manager'); ?></h3>
-                <button type="button" class="tm-close-btn" data-tm-usage-close aria-label="<?php esc_attr_e('Close', 'template-manager'); ?>">
+                <h3 id="tm-usage-title"><?php esc_html_e('Template Usage', 'anypage-header-footer-for-elementor'); ?></h3>
+                <button type="button" class="tm-close-btn" data-tm-usage-close aria-label="<?php esc_attr_e('Close', 'anypage-header-footer-for-elementor'); ?>">
                     <span class="dashicons dashicons-no-alt"></span>
                 </button>
             </div>
             <div class="tm-usage-modal-body">
                 <p id="tm-usage-subtitle" class="tm-usage-subtitle"></p>
                 <div id="tm-usage-filters" class="tm-usage-filters"></div>
-                <div id="tm-usage-empty" class="tm-usage-empty"><?php esc_html_e('No content uses this template.', 'template-manager'); ?></div>
+                <div id="tm-usage-empty" class="tm-usage-empty"><?php esc_html_e('No content uses this template.', 'anypage-header-footer-for-elementor'); ?></div>
                 <ul id="tm-usage-list" class="tm-usage-list"></ul>
             </div>
         </div>
@@ -879,7 +891,7 @@ $existing_template_slugs = array_map(
                     const action = document.createElement('a');
                     action.href = item.edit_link;
                     action.className = 'tm-usage-edit';
-                    action.textContent = '<?php echo esc_js(__('Edit', 'template-manager')); ?>';
+                    action.textContent = '<?php echo esc_js(__('Edit', 'anypage-header-footer-for-elementor')); ?>';
                     li.appendChild(action);
                 }
 

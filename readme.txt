@@ -1,6 +1,13 @@
-# Template Manager - Custom WordPress Templates Plugin
+=== AnyPage Header Footer for Elementor ===
+Contributors: kz370
+Tags: elementor, header, footer, templates
+Requires at least: 5.0
+Tested up to: 6.9
+Stable tag: 1.0.0
+License: GPLv2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Template Manager lets you create and manage `template-cu-*` templates from one compact settings page, with Elementor header/footer integration and usage visibility.
+Create and manage custom page templates with Elementor header and footer support from a single admin page.
 
 ## Highlights
 
@@ -21,8 +28,8 @@ Choosing **Real File** stores generated template files inside your active theme 
 
 ## Installation
 
-1. Copy the `template-manager` folder to:
-   `wp-content/plugins/template-manager/`
+1. Copy the `anypage-header-footer-for-elementor` folder to:
+   `wp-content/plugins/anypage-header-footer-for-elementor/`
 2. Activate **Template Manager - Custom Templates** in WordPress Admin.
 3. Open **Templates** in the WordPress admin menu.
 
@@ -56,11 +63,11 @@ Generated templates include fallback behavior:
 ## File Structure
 
 ```text
-template-manager/
-├── template-manager.php
+anypage-header-footer-for-elementor/
+├── anypage-header-footer-for-elementor.php
 ├── includes/
 │   ├── class-tm-loader.php
-│   ├── class-tm-template-manager.php
+│   ├── class-tm-anypage-header-footer-for-elementor.php
 │   └── functions.php
 ├── admin/
 │   ├── css/
@@ -85,4 +92,16 @@ template-manager/
 
 ## License
 
-GNU General Public License v2 or later
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA.

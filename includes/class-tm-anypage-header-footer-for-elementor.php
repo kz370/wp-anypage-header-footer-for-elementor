@@ -102,11 +102,11 @@ class TM_Template_Manager
             // 🔝 Header (Elementor or WP Post/Page)
             if ($header_id) {
                 if (class_exists('\Elementor\Plugin') && \Elementor\Plugin::instance()->documents->get($header_id) && \Elementor\Plugin::instance()->documents->get($header_id)->is_built_with_elementor()) {
-                    echo \Elementor\Plugin::instance()->frontend->get_builder_content_for_display($header_id);
+                    echo wp_kses_post(\Elementor\Plugin::instance()->frontend->get_builder_content_for_display($header_id));
                 } else {
                     $header_post = get_post($header_id);
                     if ($header_post) {
-                        echo apply_filters('the_content', $header_post->post_content);
+                        echo wp_kses_post(apply_filters('the_content', $header_post->post_content));
                     }
                 }
             }
@@ -123,11 +123,11 @@ class TM_Template_Manager
             // 🔻 Footer (Elementor or WP Post/Page)
             if ($footer_id) {
                 if (class_exists('\Elementor\Plugin') && \Elementor\Plugin::instance()->documents->get($footer_id) && \Elementor\Plugin::instance()->documents->get($footer_id)->is_built_with_elementor()) {
-                    echo \Elementor\Plugin::instance()->frontend->get_builder_content_for_display($footer_id);
+                    echo wp_kses_post(\Elementor\Plugin::instance()->frontend->get_builder_content_for_display($footer_id));
                 } else {
                     $footer_post = get_post($footer_id);
                     if ($footer_post) {
-                        echo apply_filters('the_content', $footer_post->post_content);
+                        echo wp_kses_post(apply_filters('the_content', $footer_post->post_content));
                     }
                 }
             }
@@ -146,6 +146,7 @@ class TM_Template_Manager
     public static function enqueue_admin_assets($hook)
     {
         // Load on any of our plugin pages (page param check is most reliable)
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading admin page slug only, not processing form data.
         $page = isset($_GET['page']) ? sanitize_text_field(wp_unslash($_GET['page'])) : '';
         $is_tm_page = in_array($page, array('tm-templates', 'tm-create-template', 'tm-template-list'), true)
             || in_array($hook, array('post-new.php', 'post.php'), true);
@@ -155,7 +156,7 @@ class TM_Template_Manager
                 'tm-google-fonts',
                 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap',
                 array(),
-                null
+                TEMPLATE_MANAGER_VERSION
             );
             wp_enqueue_style(
                 'tm-admin-style',
@@ -222,7 +223,7 @@ class TM_Template_Manager
         $footer_id = absint($footer_id);
         $slug_base = sanitize_title($name);
         $slug = ($slug_base ?: 'custom-template');
-        
+
         $main_file = 'template-cu-' . $slug . '.php';
         $header_file = 'header-' . $slug . '.php';
         $footer_file = 'footer-' . $slug . '.php';
@@ -248,19 +249,14 @@ class TM_Template_Manager
      */
     public static function get_main_template_content($name, $slug)
     {
-        return <<<PHP
-<?php
-/* Template Name: {$name} */
-
-get_header('{$slug}');
-
-while ( have_posts() ) :
-    the_post();
-    the_content();
-endwhile;
-
-get_footer('{$slug}');
-PHP;
+        return '<?php' . "\n"
+            . '/* Template Name: ' . $name . ' */' . "\n\n"
+            . 'get_header(\'' . $slug . '\');' . "\n\n"
+            . 'while ( have_posts() ) :' . "\n"
+            . '    the_post();' . "\n"
+            . '    the_content();' . "\n"
+            . 'endwhile;' . "\n\n"
+            . 'get_footer(\'' . $slug . '\');' . "\n";
     }
 
     /**
@@ -268,45 +264,39 @@ PHP;
      */
     public static function get_header_content($header_id)
     {
-        return <<<PHP
-<?php
-/**
- * Custom Header File
- */
-?>
-<!DOCTYPE html>
-<html <?php language_attributes(); ?>>
-<head>
-    <meta charset="<?php bloginfo( 'charset' ); ?>">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <?php wp_head(); ?>
-</head>
-<body <?php body_class(); ?>>
-<?php wp_body_open(); ?>
-
-<?php
-\$tm_has_custom_header = false;
-
-if ({$header_id}) {
-    \$tm_document = class_exists('\Elementor\Plugin') ? \Elementor\Plugin::instance()->documents->get({$header_id}) : null;
-
-    if (\$tm_document && \$tm_document->is_built_with_elementor()) {
-        echo \Elementor\Plugin::instance()->frontend->get_builder_content_for_display({$header_id});
-        \$tm_has_custom_header = true;
-    } else {
-        \$header_post = get_post({$header_id});
-        if (\$header_post instanceof WP_Post) {
-            echo apply_filters('the_content', \$header_post->post_content);
-            \$tm_has_custom_header = true;
-        }
-    }
-}
-
-if (!\$tm_has_custom_header) {
-    get_header();
-}
-?>
-PHP;
+        return '<?php' . "\n"
+            . '/**' . "\n"
+            . ' * Custom Header File' . "\n"
+            . ' */' . "\n"
+            . '?>' . "\n"
+            . '<!DOCTYPE html>' . "\n"
+            . '<html <?php language_attributes(); ?>>' . "\n"
+            . '<head>' . "\n"
+            . '    <meta charset="<?php bloginfo( \'charset\' ); ?>">' . "\n"
+            . '    <meta name="viewport" content="width=device-width, initial-scale=1">' . "\n"
+            . '    <?php wp_head(); ?>' . "\n"
+            . '</head>' . "\n"
+            . '<body <?php body_class(); ?>>' . "\n"
+            . '<?php wp_body_open(); ?>' . "\n\n"
+            . '<?php' . "\n"
+            . '$tm_has_custom_header = false;' . "\n\n"
+            . 'if (' . $header_id . ') {' . "\n"
+            . '    $tm_document = class_exists(\'\Elementor\Plugin\') ? \Elementor\Plugin::instance()->documents->get(' . $header_id . ') : null;' . "\n\n"
+            . '    if ($tm_document && $tm_document->is_built_with_elementor()) {' . "\n"
+            . '        echo \Elementor\Plugin::instance()->frontend->get_builder_content_for_display(' . $header_id . ');' . "\n"
+            . '        $tm_has_custom_header = true;' . "\n"
+            . '    } else {' . "\n"
+            . '        $header_post = get_post(' . $header_id . ');' . "\n"
+            . '        if ($header_post instanceof WP_Post) {' . "\n"
+            . '            echo apply_filters(\'the_content\', $header_post->post_content);' . "\n"
+            . '            $tm_has_custom_header = true;' . "\n"
+            . '        }' . "\n"
+            . '    }' . "\n"
+            . '}' . "\n\n"
+            . 'if (!$tm_has_custom_header) {' . "\n"
+            . '    get_header();' . "\n"
+            . '}' . "\n"
+            . '?>' . "\n";
     }
 
     /**
@@ -314,36 +304,30 @@ PHP;
      */
     public static function get_footer_content($footer_id)
     {
-        return <<<PHP
-<?php
-/**
- * Custom Footer File
- */
-
-\$tm_has_custom_footer = false;
-
-if ({$footer_id}) {
-    \$tm_document = class_exists('\Elementor\Plugin') ? \Elementor\Plugin::instance()->documents->get({$footer_id}) : null;
-
-    if (\$tm_document && \$tm_document->is_built_with_elementor()) {
-        echo \Elementor\Plugin::instance()->frontend->get_builder_content_for_display({$footer_id});
-        \$tm_has_custom_footer = true;
-    } else {
-        \$footer_post = get_post({$footer_id});
-        if (\$footer_post instanceof WP_Post) {
-            echo apply_filters('the_content', \$footer_post->post_content);
-            \$tm_has_custom_footer = true;
-        }
-    }
-}
-
-if (!\$tm_has_custom_footer) {
-    get_footer();
-}
-?>
-<?php wp_footer(); ?>
-</body>
-</html>
-PHP;
+        return '<?php' . "\n"
+            . '/**' . "\n"
+            . ' * Custom Footer File' . "\n"
+            . ' */' . "\n\n"
+            . '$tm_has_custom_footer = false;' . "\n\n"
+            . 'if (' . $footer_id . ') {' . "\n"
+            . '    $tm_document = class_exists(\'\Elementor\Plugin\') ? \Elementor\Plugin::instance()->documents->get(' . $footer_id . ') : null;' . "\n\n"
+            . '    if ($tm_document && $tm_document->is_built_with_elementor()) {' . "\n"
+            . '        echo \Elementor\Plugin::instance()->frontend->get_builder_content_for_display(' . $footer_id . ');' . "\n"
+            . '        $tm_has_custom_footer = true;' . "\n"
+            . '    } else {' . "\n"
+            . '        $footer_post = get_post(' . $footer_id . ');' . "\n"
+            . '        if ($footer_post instanceof WP_Post) {' . "\n"
+            . '            echo apply_filters(\'the_content\', $footer_post->post_content);' . "\n"
+            . '            $tm_has_custom_footer = true;' . "\n"
+            . '        }' . "\n"
+            . '    }' . "\n"
+            . '}' . "\n\n"
+            . 'if (!$tm_has_custom_footer) {' . "\n"
+            . '    get_footer();' . "\n"
+            . '}' . "\n"
+            . '?>' . "\n"
+            . '<?php wp_footer(); ?>' . "\n"
+            . '</body>' . "\n"
+            . '</html>' . "\n";
     }
 }

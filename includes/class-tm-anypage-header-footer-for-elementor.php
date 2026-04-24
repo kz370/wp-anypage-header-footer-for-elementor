@@ -166,6 +166,7 @@ class TM_Template_Manager
             );
         }
     }
+    
 
     /**
      * Add admin menu for template management
@@ -173,13 +174,13 @@ class TM_Template_Manager
     public static function add_template_management_menu()
     {
         add_menu_page(
-            'Template Manager',
-            'Templates',
+            'Anypage Header & Footer',
+            'Anypage Header & Footer',
             'manage_options',
             'tm-templates',
             array(self::class, 'render_admin_page'),
-            'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"%3E%3Cpath fill="%232c3e50" d="M4 4.75A2.75 2.75 0 0 1 6.75 2h10.5A2.75 2.75 0 0 1 20 4.75v14.5A2.75 2.75 0 0 1 17.25 22H6.75A2.75 2.75 0 0 1 4 19.25V4.75Z"/%3E%3Cpath fill="%23ffffff" d="M7 7.25C7 6.56 7.56 6 8.25 6h7.5c.69 0 1.25.56 1.25 1.25v2.5c0 .69-.56 1.25-1.25 1.25h-7.5C7.56 11 7 10.44 7 9.75v-2.5Zm0 7C7 13.56 7.56 13 8.25 13h2.5c.69 0 1.25.56 1.25 1.25v2.5c0 .69-.56 1.25-1.25 1.25h-2.5C7.56 18 7 17.44 7 16.75v-2.5Zm6 0c0-.69.56-1.25 1.25-1.25h1.5c.69 0 1.25.56 1.25 1.25v2.5c0 .69-.56 1.25-1.25 1.25h-1.5c-.69 0-1.25-.56-1.25-1.25v-2.5Z"/%3E%3C/svg%3E',
-            100
+            'dashicons-layout',
+            65
         );
     }
 

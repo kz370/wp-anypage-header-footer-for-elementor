@@ -13,6 +13,7 @@
  * Tested up to: 6.9
  * Requires PHP: 8.0
  * Stable tag: 1.0.0
+ * Icon: icon.png
  */
 
 // Prevent direct file access
